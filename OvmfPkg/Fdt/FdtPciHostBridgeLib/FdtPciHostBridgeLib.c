@@ -444,7 +444,7 @@ PciHostBridgeGetRootBridges (
   PMemAbove4G.Base  = MAX_UINT64;
   PMemAbove4G.Limit = 0;
 
-  return PciHostBridgeUtilityGetRootBridges (
+  PCI_ROOT_BRIDGE  *Bridges = PciHostBridgeUtilityGetRootBridges (
            Count,
            Attributes,
            AllocationAttributes,
@@ -458,6 +458,12 @@ PciHostBridgeGetRootBridges (
            &PMem,
            &PMemAbove4G
            );
+  if (Bridges != NULL) {
+    for (UINTN Index = 0; Index < *Count; Index++) {
+      Bridges[Index].ResourceAssigned = PcdGetBool (PcdPciDisableBusEnumeration);
+    }
+  }
+  return Bridges;
 }
 
 /**
