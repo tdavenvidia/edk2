@@ -41,6 +41,7 @@
 [Pcd]
   gEfiMdePkgTokenSpaceGuid.PcdPciIoTranslation
   gEfiMdePkgTokenSpaceGuid.PcdPciExpressBaseAddress
+  gEfiMdeModulePkgTokenSpaceGuid.PcdPciDisableBusEnumeration
 
 [Depex]
   gFdtClientProtocolGuid
