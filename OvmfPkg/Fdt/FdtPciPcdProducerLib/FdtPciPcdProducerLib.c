@@ -96,6 +96,9 @@ FdtPciPcdProducerLibConstructor (
   RETURN_STATUS        RetStatus;
   UINT64               IoTranslation;
   RETURN_STATUS        PcdStatus;
+  CONST VOID           *PropertyPtr;
+  UINT32               TempLen;
+  BOOLEAN              DisableBusEnumeration;
 
   PciExpressBaseAddress = PcdGet64 (PcdPciExpressBaseAddress);
   if (PciExpressBaseAddress != MAX_UINT64) {
@@ -135,7 +138,32 @@ FdtPciPcdProducerLibConstructor (
     if (!EFI_ERROR (Status) && (RegSize == 2 * sizeof (UINT64))) {
       PciExpressBaseAddress = SwapBytes64 (*Reg);
 
-      PcdStatus = PcdSetBoolS (PcdPciDisableBusEnumeration, FALSE);
+      //
+      // If the FDT node has "pci-enum-done", the host (e.g. QEMU) has already
+      // run PCI enumeration and BAR allocation; allow PcdPciDisableBusEnumeration
+      // to remain as set by the platform. Otherwise force it to FALSE so EDK2
+      // performs full PCI enumeration.
+      //
+      PropertyPtr = NULL;
+      TempLen     = 0;
+      Status      = FdtClient->GetNodeProperty (
+                      FdtClient,
+                      Node,
+                      "pci-enum-done",
+                      &PropertyPtr,
+                      &TempLen
+                      );
+
+      DisableBusEnumeration = FALSE;
+      if (!EFI_ERROR (Status) && (TempLen > 0)) {
+        DisableBusEnumeration = TRUE;
+        DEBUG ((
+          DEBUG_INFO,
+          "  Found pci-enum-done property, disabling full PCI bus enumeration\n"
+          ));
+      }
+
+      PcdStatus = PcdSetBoolS (PcdPciDisableBusEnumeration, DisableBusEnumeration);
       ASSERT_RETURN_ERROR (PcdStatus);
 
       IoTranslation = 0;
