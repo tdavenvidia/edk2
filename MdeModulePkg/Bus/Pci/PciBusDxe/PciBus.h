@@ -97,6 +97,7 @@ struct _PCI_BAR {
   PCI_BAR_TYPE    BarType;
   BOOLEAN         BarTypeFixed;
   UINT16          Offset;
+  UINT64          FixedBaseAddress;  /* pinned HPA when BarTypeFixed == TRUE */
 };
 
 //

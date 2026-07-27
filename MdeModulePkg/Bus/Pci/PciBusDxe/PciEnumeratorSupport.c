@@ -1638,6 +1638,24 @@ UpdatePciInfo (
         if (Ptr->AddrLen != 0) {
           PciIoDevice->PciBar[BarIndex].Length = Ptr->AddrLen;
         }
+
+        //
+        // When both _MIF (BIT2) and _MAF (BIT3) are set in GenFlag the
+        // descriptor carries a fixed (pinned) base address in AddrRangeMin.
+        // Store it so ProgramBar() can place the BAR at the exact HPA instead
+        // of the GCD-allocated Base+Offset.
+        //
+        if ((Ptr->GenFlag & (BIT2 | BIT3)) == (BIT2 | BIT3)) {
+          PciIoDevice->PciBar[BarIndex].BarTypeFixed    = TRUE;
+          PciIoDevice->PciBar[BarIndex].FixedBaseAddress = Ptr->AddrRangeMin;
+          DEBUG ((
+            DEBUG_INFO,
+            "PciBus: UpdatePciInfo BAR[%u] Offset=0x%x fixed HPA=0x%016Lx\n",
+            (UINT32)BarIndex,
+            PciIoDevice->PciBar[BarIndex].Offset,
+            Ptr->AddrRangeMin
+            ));
+        }
       }
     }
 
