@@ -469,6 +469,7 @@
   #
   # PCI support
   #
+  OvmfPkg/QemuFixedBarsDxe/QemuFixedBarsDxe.inf
   MdeModulePkg/Bus/Pci/PciHostBridgeDxe/PciHostBridgeDxe.inf
 
   #
