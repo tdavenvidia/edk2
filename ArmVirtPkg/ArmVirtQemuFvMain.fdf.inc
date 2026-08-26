@@ -157,6 +157,7 @@ READ_LOCK_STATUS   = TRUE
   # PCI support
   #
   INF UefiCpuPkg/CpuMmio2Dxe/CpuMmio2Dxe.inf
+  INF OvmfPkg/QemuFixedBarsDxe/QemuFixedBarsDxe.inf
   INF MdeModulePkg/Bus/Pci/PciHostBridgeDxe/PciHostBridgeDxe.inf
   INF MdeModulePkg/Bus/Pci/PciBusDxe/PciBusDxe.inf
   INF OvmfPkg/PciHotPlugInitDxe/PciHotPlugInit.inf

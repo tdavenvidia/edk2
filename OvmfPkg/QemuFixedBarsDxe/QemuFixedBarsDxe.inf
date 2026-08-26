@@ -1,0 +1,43 @@
+## @file
+#  Fixed-BAR support for QEMU passthrough devices.
+#
+#  Reads QEMU's etc/fixed-bars fw_cfg blob and publishes
+#  EFI_INCOMPATIBLE_PCI_DEVICE_SUPPORT_PROTOCOL so that PciBusDxe places
+#  each matching device's BARs at given addresses.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION    = 0x00010005
+  BASE_NAME      = QemuFixedBarsDxe
+  FILE_GUID      = a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  MODULE_TYPE    = DXE_DRIVER
+  VERSION_STRING = 1.0
+  ENTRY_POINT    = QemuFixedBarsDxeEntryPoint
+
+[Sources]
+  QemuFixedBarsDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  OvmfPkg/OvmfPkg.dec
+
+[LibraryClasses]
+  BaseMemoryLib
+  DebugLib
+  DxeServicesTableLib
+  MemoryAllocationLib
+  QemuFwCfgLib
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+
+[Protocols]
+  gEfiIncompatiblePciDeviceSupportProtocolGuid       ## PRODUCES
+  gEfiPciHostBridgeResourceAllocationProtocolGuid    ## CONSUMES
+  gEfiPciEnumerationCompleteProtocolGuid             ## CONSUMES
+  gEfiPciIoProtocolGuid                              ## CONSUMES
+
+[Depex]
+  gEfiPciHostBridgeResourceAllocationProtocolGuid
