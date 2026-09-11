@@ -325,6 +325,35 @@ CalculateApertureIo16 (
 }
 
 /**
+  Return TRUE, with the fixed base address, if Node must be placed at a
+  specific address instead of anywhere satisfying Length/Alignment. Node is
+  either a BAR marked fixed by IncompatiblePciDeviceSupport, or a
+  child bridge whose own window was already determined to be fixed.
+
+  @param Node        Resource node to check.
+  @param FixedBase   Fixed base address of Node.
+
+  @retval TRUE   Node requires a fixed base address.
+  @retval FALSE  Node has no fixed base address requirement.
+
+**/
+STATIC
+BOOLEAN
+ResourceNodeIsFixed (
+  IN  PCI_RESOURCE_NODE  *Node,
+  OUT UINT64             *FixedBase
+  )
+{
+  if (IS_PCI_BRIDGE (&Node->PciDev->Pci)) {
+    *FixedBase = Node->FixedBase;
+    return Node->Fixed;
+  }
+
+  *FixedBase = Node->PciDev->PciBar[Node->Bar].FixedBaseAddress;
+  return Node->PciDev->PciBar[Node->Bar].BarTypeFixed;
+}
+
+/**
   This function is used to calculate the resource aperture
   for a given bridge device.
 
@@ -339,6 +368,9 @@ CalculateResourceAperture (
   UINT64             Aperture[2];
   LIST_ENTRY         *CurrentLink;
   PCI_RESOURCE_NODE  *Node;
+  UINT64             ChildFixedBase;
+  UINT64             FixedMin;
+  UINT64             FixedMax;
 
   if (Bridge == NULL) {
     return;
@@ -346,6 +378,72 @@ CalculateResourceAperture (
 
   if (Bridge->ResType == PciBarTypeIo16) {
     CalculateApertureIo16 (Bridge);
+    return;
+  }
+
+  //
+  // If at least one child requires a fixed base address, size and place
+  // this bridge's window as the exact union of those addresses instead of
+  // packing children by size and alignment alone.
+  //
+  FixedMin = MAX_UINT64;
+  FixedMax = 0;
+  for ( CurrentLink = GetFirstNode (&Bridge->ChildList)
+        ; !IsNull (&Bridge->ChildList, CurrentLink)
+        ; CurrentLink = GetNextNode (&Bridge->ChildList, CurrentLink)
+        )
+  {
+    Node = RESOURCE_NODE_FROM_LINK (CurrentLink);
+
+    if (ResourceNodeIsFixed (Node, &ChildFixedBase)) {
+      FixedMin = MIN (FixedMin, ChildFixedBase);
+      FixedMax = MAX (FixedMax, ChildFixedBase + Node->Length);
+    }
+  }
+
+  if (FixedMin < FixedMax) {
+    Bridge->Fixed     = TRUE;
+    Bridge->FixedBase = FixedMin & ~Bridge->Alignment;
+
+    for ( CurrentLink = GetFirstNode (&Bridge->ChildList)
+          ; !IsNull (&Bridge->ChildList, CurrentLink)
+          ; CurrentLink = GetNextNode (&Bridge->ChildList, CurrentLink)
+          )
+    {
+      Node = RESOURCE_NODE_FROM_LINK (CurrentLink);
+
+      //
+      // Only fixed children are placed here; a non-fixed sibling's own
+      // window/BAR sizing is unrelated to the fixed union and is left
+      // alone.
+      //
+      if (ResourceNodeIsFixed (Node, &ChildFixedBase)) {
+        Node->Offset = ChildFixedBase - Bridge->FixedBase;
+        FixedMax     = MAX (FixedMax, Node->Offset + Node->Length + Bridge->FixedBase);
+
+        DEBUG ((DEBUG_INFO,
+                "PciBus: bridge %02x:%02x.%x child %02x:%02x.%x BAR[%d] fixed at 0x%016Lx, length 0x%Lx\n",
+                Bridge->PciDev->BusNumber, Bridge->PciDev->DeviceNumber, Bridge->PciDev->FunctionNumber,
+                Node->PciDev->BusNumber, Node->PciDev->DeviceNumber, Node->PciDev->FunctionNumber,
+                Node->Bar, ChildFixedBase, Node->Length));
+      }
+    }
+
+    Bridge->Length = ALIGN_VALUE (FixedMax - Bridge->FixedBase, Bridge->Alignment + 1);
+
+    DEBUG ((DEBUG_INFO,
+            "PciBus: bridge %02x:%02x.%x fixed window [0x%016Lx, 0x%016Lx]\n",
+            Bridge->PciDev->BusNumber, Bridge->PciDev->DeviceNumber, Bridge->PciDev->FunctionNumber,
+            Bridge->FixedBase, Bridge->FixedBase + Bridge->Length - 1));
+
+    CurrentLink = Bridge->ChildList.ForwardLink;
+    if (CurrentLink != &Bridge->ChildList) {
+      Node = RESOURCE_NODE_FROM_LINK (CurrentLink);
+      if (Node->Alignment > Bridge->Alignment) {
+        Bridge->Alignment = Node->Alignment;
+      }
+    }
+
     return;
   }
 
@@ -1469,6 +1567,18 @@ ProgramPpbApperture (
 
   PciIo   = &(Node->PciDev->PciIo);
   Address = Base + Node->Offset;
+
+  //
+  // If CalculateResourceAperture() determined this window must cover a
+  // fixed BAR, use its base directly.
+  //
+  if (Node->Fixed) {
+    Address = Node->FixedBase;
+    DEBUG ((DEBUG_INFO,
+            "PciBus: bridge %02x:%02x.%x fixed window base 0x%016Lx (GCD 0x%016Lx)\n",
+            Node->PciDev->BusNumber, Node->PciDev->DeviceNumber, Node->PciDev->FunctionNumber,
+            Address, Base + Node->Offset));
+  }
 
   //
   // Indicate the PPB resource has been allocated
