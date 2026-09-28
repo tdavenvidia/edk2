@@ -102,6 +102,8 @@ struct _PCI_BAR {
   // its BaseAddress is fixed by hardware and must not be reassigned.
   //
   BOOLEAN         AddressFixed;
+  UINT64          FixedBaseAddress;
+  BOOLEAN         HasFixedBaseAddress;
   UINT16          Offset;
 };
 
