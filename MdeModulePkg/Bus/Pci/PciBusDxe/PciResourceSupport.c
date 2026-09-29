@@ -1800,7 +1800,20 @@ ProgramResource (
   }
 
   if (Base == gAllOne) {
-    return EFI_OUT_OF_RESOURCES;
+    if (ResourceRequestExisted (Bridge)) {
+      DEBUG ((
+        DEBUG_ERROR,
+        "PciBus: ProgramResource: Type = %s has a real relocatable request but no Base was assigned\n",
+        mBarTypeStr[MIN (Bridge->ResType, PciBarTypeMaxType)]
+        ));
+      return EFI_OUT_OF_RESOURCES;
+    }
+
+    DEBUG ((
+      DEBUG_INFO,
+      "PciBus: ProgramResource: Type = %s has no relocatable request (Fixed-only or empty); proceeding to program any Fixed children\n",
+      mBarTypeStr[MIN (Bridge->ResType, PciBarTypeMaxType)]
+      ));
   }
 
   CurrentLink = Bridge->ChildList.ForwardLink;
@@ -1860,6 +1873,15 @@ ProgramResource (
     if (Node->Fixed && !IsPpbWindowNode (Node) &&
         Node->PciDev->PciBar[Node->Bar].HasFixedBaseAddress)
     {
+      DEBUG ((
+        DEBUG_INFO,
+        "PciBus: [%02x|%02x|%02x] BAR[%d] programming platform-fixed base 0x%lx\n",
+        Node->PciDev->BusNumber,
+        Node->PciDev->DeviceNumber,
+        Node->PciDev->FunctionNumber,
+        Node->Bar,
+        Node->FixedBase
+        ));
       ProgramBar (Node->FixedBase, Node);
     }
 
@@ -2373,9 +2395,31 @@ ResourceRequestExisted (
   IN PCI_RESOURCE_NODE  *Bridge
   )
 {
+  LIST_ENTRY         *Link;
+  PCI_RESOURCE_NODE  *Node;
+
   if (Bridge != NULL) {
-    if (!IsListEmpty (&Bridge->ChildList) || (Bridge->Length != 0)) {
+    if (Bridge->Length != 0) {
       return TRUE;
+    }
+
+    //
+    // A non-empty ChildList alone does not imply a real request: a pool
+    // whose only children are fixed resource nodes correctly aggregates to
+    // zero Length (fixed nodes are excluded from CalculateResourceAperture's
+    // relocatable sizing), but the fixed children are deliberately kept on
+    // the list for ProgramResource()'s later walk. Only a non-fixed child
+    // signals an actual relocatable request.
+    //
+    for ( Link = GetFirstNode (&Bridge->ChildList)
+          ; !IsNull (&Bridge->ChildList, Link)
+          ; Link = GetNextNode (&Bridge->ChildList, Link)
+          )
+    {
+      Node = RESOURCE_NODE_FROM_LINK (Link);
+      if (!Node->Fixed) {
+        return TRUE;
+      }
     }
   }
 
