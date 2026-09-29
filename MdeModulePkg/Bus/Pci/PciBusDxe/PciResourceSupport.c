@@ -965,6 +965,57 @@ GetResourceFromDevice (
       continue;
     }
 
+    if ((PciDev->PciBar)[Index].HasFixedBaseAddress) {
+      //
+      // This BAR has a fixed base address supplied by the platform (for
+      // example, via an ACPI descriptor), independent of the Enhanced
+      // Allocation capability handled above. It must not be assigned by
+      // the resource allocator, but the windows of upstream bridges must
+      // cover it. So create a fixed resource node, which does not consume
+      // any of the parent's resources.
+      //
+      switch ((PciDev->PciBar)[Index].BarType) {
+        case PciBarTypeMem32:
+          DestNode = Mem32Node;
+          break;
+        case PciBarTypePMem32:
+          DestNode = PMem32Node;
+          break;
+        case PciBarTypeMem64:
+          DestNode = Mem64Node;
+          break;
+        case PciBarTypePMem64:
+          DestNode = PMem64Node;
+          break;
+        case PciBarTypeIo16:
+        case PciBarTypeIo32:
+          DestNode = IoNode;
+          break;
+        default:
+          break;
+      }
+
+      if (DestNode != NULL) {
+        Node = CreateResourceNode (
+                 PciDev,
+                 (PciDev->PciBar)[Index].Length,
+                 0,
+                 Index,
+                 (DestNode == IoNode) ? PciBarTypeIo16 : (PciDev->PciBar)[Index].BarType,
+                 PciResUsageTypical
+                 );
+        if (Node != NULL) {
+          Node->Fixed      = TRUE;
+          Node->FixedBase  = (PciDev->PciBar)[Index].FixedBaseAddress;
+          Node->FixedLimit = Node->FixedBase + Node->Length - 1;
+          InsertResourceNode (DestNode, Node);
+        }
+      }
+
+      continue;
+    }
+
+
     switch ((PciDev->PciBar)[Index].BarType) {
       case PciBarTypeMem32:
       case PciBarTypeOpRom:
@@ -1791,6 +1842,25 @@ ProgramResource (
       }
 
       ProgramPpbApperture (Base, Node);
+    }
+
+    CurrentLink = CurrentLink->ForwardLink;
+  }
+
+  //
+  // A leaf BAR whose fixed base address came from the platform (rather than
+  // an Enhanced Allocation entry) has no independent hardware decode, so its
+  // register must still be written with the fixed base recorded during
+  // enumeration.
+  //
+  CurrentLink = Bridge->ChildList.ForwardLink;
+  while (CurrentLink != &Bridge->ChildList) {
+    Node = RESOURCE_NODE_FROM_LINK (CurrentLink);
+
+    if (Node->Fixed && !IsPpbWindowNode (Node) &&
+        Node->PciDev->PciBar[Node->Bar].HasFixedBaseAddress)
+    {
+      ProgramBar (Node->FixedBase, Node);
     }
 
     CurrentLink = CurrentLink->ForwardLink;
