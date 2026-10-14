@@ -1885,9 +1885,12 @@ ProgramResource (
   IN PCI_RESOURCE_NODE  *Bridge
   )
 {
-  LIST_ENTRY         *CurrentLink;
-  PCI_RESOURCE_NODE  *Node;
-  EFI_STATUS         Status;
+  LIST_ENTRY           *CurrentLink;
+  PCI_RESOURCE_NODE    *Node;
+  EFI_STATUS           Status;
+  EFI_PCI_IO_PROTOCOL  *PciIo;
+  UINT64               Address;
+  UINT32               Address32;
 
   //
   // Program the windows of bridges that are pinned by fixed resources first,
@@ -1920,9 +1923,49 @@ ProgramResource (
 
     if (Node->Fixed) {
       //
-      // Fixed BARs are not programmed, but they are allocated by definition.
+      // Fixed BARs retain the base address recorded during enumeration. They
+      // are allocated by definition, and are only programmed if the BAR
+      // register does not already hold that address.
       //
       if (!IsPpbWindowNode (Node)) {
+        PciIo = &(Node->PciDev->PciIo);
+        PciIo->Pci.Read (
+                     PciIo,
+                     EfiPciIoWidthUint32,
+                     (Node->PciDev->PciBar[Node->Bar]).Offset,
+                     1,
+                     &Address32
+                     );
+        Address = Address32;
+
+        if ((Node->PciDev->PciBar[Node->Bar].BarType == PciBarTypeMem64) ||
+            (Node->PciDev->PciBar[Node->Bar].BarType == PciBarTypePMem64))
+        {
+          PciIo->Pci.Read (
+                       PciIo,
+                       EfiPciIoWidthUint32,
+                       (UINT8)((Node->PciDev->PciBar[Node->Bar]).Offset + 4),
+                       1,
+                       &Address32
+                       );
+          Address |= LShiftU64 (Address32, 32);
+        }
+
+        //
+        // The low bits of a BAR register are type flags, not address bits.
+        //
+        if ((Node->PciDev->PciBar[Node->Bar].BarType == PciBarTypeIo16) ||
+            (Node->PciDev->PciBar[Node->Bar].BarType == PciBarTypeIo32))
+        {
+          Address &= ~(UINT64)0x3;
+        } else {
+          Address &= ~(UINT64)0xF;
+        }
+
+        if (Address != Node->FixedBase) {
+          ProgramBar (Node->FixedBase, Node);
+        }
+
         Node->PciDev->Allocated = TRUE;
       }
 
